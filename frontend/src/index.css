@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* Estilos base */
+body {
+  background-color: rgb(17 24 39); /* bg-gray-900 */
+  color: rgb(243 244 246); /* text-gray-100 */
+  line-height: 1.6;
+}
+
+/* Inputs e selects */
+input[type='text'],
+input[type='number'],
+input[type='email'],
+input[type='password'],
+select {
+  @apply w-full rounded-md border border-gray-700 bg-gray-800 text-gray-100 px-3 py-2
+         focus:border-indigo-400 focus:ring focus:ring-indigo-500/40 transition shadow-sm;
+}
+
+input[type='checkbox'] {
+  @apply accent-indigo-500 scale-110 mr-2;
+}
+
+fieldset {
+  @apply bg-gray-800 border border-gray-700 rounded-xl shadow-lg;
+}
+
+legend {
+  @apply text-indigo-400 text-lg font-bold px-2 mb-4;
+}
+
+button {
+  @apply bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-3 rounded-lg
+         focus:ring-4 focus:ring-indigo-500/50 transition;
+}
