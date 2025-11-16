@@ -40,12 +40,19 @@ class SimulationService:
             raise Exception(f"Failed to generate SUMO routes: {e.stderr}")
 
     def _generate_omnetpp_ini(self, payload: SimulationPayload) -> str:
-        """Gera o conteúdo do omnetpp.ini"""
-        
-        # Baseado no PDF (B5GCyberTestV2X-master_content.pdf) e no seu app.py
-        # Esta é uma versão simplificada para o SimpleJammingPage
-        
-        # Lógica para ataque de Jamming
+        """Gera o conteúdo do omnetpp.ini para o payload SIMPLES."""
+        # --- Parâmetros V2X (Novos) ---
+        app_cfg = f"""
+*.host[*].app[0].typename = "V2XApp"
+*.host[*].app[0].sendInterval = {payload.app_params.send_interval_s}s
+*.host[*].app[0].packetSize = {payload.app_params.packet_size_b}B
+"""
+        net_cfg = f"""
+*.host[*].phy.txPower = {payload.net_params.tx_power_dbm}dBm
+*.connectionManager.bitrate = {payload.net_params.bitrate_mbps}Mbps
+"""
+
+        # --- Parâmetros de Ataque (Atualizados) ---
         attacker_config = ""
         if payload.execute_with_attack and payload.jamming_params:
             jp = payload.jamming_params
@@ -57,14 +64,15 @@ class SimulationService:
 *.attacker[0].mobility.numHosts = 1
 *.attacker[0].mobility.deployment = "center" 
 *.attacker[0].app[0].typename = "JammerApp"
-*.attacker[0].app[0].startTime = {jp.start}s
-*.attacker[0].app[0].stopTime = {jp.end}s
+*.attacker[0].app[0].startTime = {jp.start_time_s}s
+*.attacker[0].app[0].stopTime = {jp.stop_time_s}s
 *.attacker[0].app[0].power = {jp.power_dbm}mW 
-# ... (outros parâmetros de jamming)
+*.attacker[0].app[0].strategy = "{jp.strategy}"
 """
         else:
             attacker_config = "*.numAttacker = 0"
 
+        # --- Conteúdo Final do .ini ---
         ini_content = f"""
 [General]
 network = B5GSim
@@ -81,31 +89,26 @@ seed-set = {payload.random_seed}
 
 # --- Scenario ---
 *.numHosts = {payload.total_vehicles}
-*.host[*].typename = "NRCar" # Assumindo NRCar como padrão
-
-# --- Mobility ---
+*.host[*].typename = "NRCar"
 *.host[*].mobility.typename = "VeinsInetMobility"
 
-# --- Applications ---
-*.host[*].numApps = {payload.apps_per_vehicle}
-*.host[*].app[0].typename = "V2XApp" # Exemplo
-# ... (configurações de app)
-
-{attacker_config}
+# --- Applications & Network ---
+*.host[*].numApps = 1
+{app_cfg}
+{net_cfg}
 
 # --- 5G ---
-# ... (configs de 5G baseadas no modo D2D/Celular)
 *.host[*].masterId = 100
 *.host[*].cellId = 1
 *.host[*].isUe = true
 *.host[*].isRsu = false
 
-# --- Metrics (exemplo) ---
+# --- Attack ---
+{attacker_config}
+
+# --- Metrics ---
 **.scalar-recording = true
 **.vector-recording = true
-output-scalar-file = "results/scalars"
-output-vector-file = "results/vectors"
-# ...
 """
         return ini_content
 

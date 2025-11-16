@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-11-16T20:26:33.517326-03:00 by Eclipse SUMO netconvert 1.25.0
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <osm-files value="optimized_maps/osm_files/industrial.osm"/>
+    </input>
+
+    <output>
+        <output-file value="optimized_maps/sumo_xml/industrial.net.xml"/>
+    </output>
+
+    <projection>
+        <proj.utm value="true"/>
+    </projection>
+
+    <processing>
+        <geometry.remove value="true"/>
+        <roundabouts.guess value="true"/>
+    </processing>
+
+    <tls_building>
+        <tls.discard-simple value="true"/>
+        <tls.join value="true"/>
+        <tls.guess-signals value="true"/>
+    </tls_building>
+
+    <ramp_guessing>
+        <ramps.guess value="true"/>
+    </ramp_guessing>
+
+    <junctions>
+        <junctions.join value="true"/>
+    </junctions>
+
+</netconvertConfiguration>
+-->
+
+<net version="1.20" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+
+    <location netOffset="-580347.88,-5675512.93" convBoundary="0.00,0.00,562.74,176.45" origBoundary="4.148646,51.220545,4.158712,51.226901" projParameter="+proj=utm +zone=31 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"/>
+
+    <type id="highway.tertiary" priority="10" numLanes="1" speed="22.22" disallow="tram rail_urban rail rail_electric rail_fast ship container cable_car subway aircraft wheelchair scooter drone" oneway="0"/>
+
+    <edge id=":2269951669_0" function="internal">
+        <lane id=":2269951669_0_0" index="0" disallow="tram rail_urban rail rail_electric rail_fast ship container cable_car subway aircraft wheelchair scooter drone" speed="3.65" length="4.67" shape="562.27,13.25 563.65,13.66 564.27,14.31 564.12,15.19 563.21,16.31"/>
+    </edge>
+    <edge id=":255737628_0" function="internal">
+        <lane id=":255737628_0_0" index="0" disallow="tram rail_urban rail rail_electric rail_fast ship container cable_car subway aircraft wheelchair scooter drone" speed="3.65" length="4.67" shape="-1.28,0.96 -1.36,-0.48 -0.96,-1.28 -0.08,-1.44 1.28,-0.96"/>
+    </edge>
+
+    <edge id="-217685796" from="2269951669" to="255737628" priority="10" type="highway.tertiary" shape="562.74,14.78 497.51,34.79 457.65,47.50 415.12,62.08 310.53,106.84 264.61,130.03 251.05,137.90 226.84,152.34 206.91,164.42 197.03,169.99 188.26,173.46 180.69,175.14 167.52,176.45 152.93,175.62 149.88,175.00 140.21,173.04 129.44,169.51 119.82,165.41 106.56,158.59 95.29,150.07 87.50,142.69 80.96,134.46 74.99,125.86 19.70,28.53 11.47,15.35 0.00,0.00">
+        <lane id="-217685796_0" index="0" disallow="tram rail_urban rail rail_electric rail_fast ship container cable_car subway aircraft wheelchair scooter drone" speed="13.89" length="687.91" shape="563.21,16.31 497.99,36.32 458.15,49.02 415.69,63.57 311.21,108.29 265.37,131.44 251.86,139.28 227.66,153.71 207.72,165.80 197.72,171.44 188.73,174.99 180.94,176.72 167.55,178.05 152.72,177.21 149.56,176.57 139.80,174.59 128.88,171.01 119.14,166.86 105.71,159.95 94.25,151.29 86.32,143.77 79.68,135.41 73.63,126.71 18.33,29.35 10.15,16.25 -1.28,0.96"/>
+    </edge>
+    <edge id="217685796" from="255737628" to="2269951669" priority="10" type="highway.tertiary" shape="0.00,0.00 11.47,15.35 19.70,28.53 74.99,125.86 80.96,134.46 87.50,142.69 95.29,150.07 106.56,158.59 119.82,165.41 129.44,169.51 140.21,173.04 149.88,175.00 152.93,175.62 167.52,176.45 180.69,175.14 188.26,173.46 197.03,169.99 206.91,164.42 226.84,152.34 251.05,137.90 264.61,130.03 310.53,106.84 415.12,62.08 457.65,47.50 497.51,34.79 562.74,14.78">
+        <lane id="217685796_0" index="0" disallow="tram rail_urban rail rail_electric rail_fast ship container cable_car subway aircraft wheelchair scooter drone" speed="13.89" length="683.98" shape="1.28,-0.96 12.79,14.45 21.07,27.71 76.35,125.01 82.24,133.51 88.68,141.61 96.33,148.85 107.41,157.23 120.50,163.96 130.00,168.01 140.62,171.49 150.20,173.43 153.14,174.03 167.49,174.85 180.44,173.56 187.79,171.93 196.34,168.54 206.10,163.04 226.02,150.97 250.24,136.52 263.85,128.62 309.85,105.39 414.55,60.59 457.15,45.98 497.03,33.26 562.27,13.25"/>
+    </edge>
+
+    <junction id="2269951669" type="priority" x="562.74" y="14.78" incLanes="217685796_0" intLanes=":2269951669_0_0" shape="562.74,14.78 561.80,11.72 562.74,14.78">
+        <request index="0" response="0" foes="0" cont="0"/>
+    </junction>
+    <junction id="255737628" type="priority" x="0.00" y="0.00" incLanes="-217685796_0" intLanes=":255737628_0_0" shape="0.00,0.00 -2.56,1.92 0.00,0.00">
+        <request index="0" response="0" foes="0" cont="0"/>
+    </junction>
+
+    <connection from="-217685796" to="217685796" fromLane="0" toLane="0" via=":255737628_0_0" dir="t" state="M"/>
+    <connection from="217685796" to="-217685796" fromLane="0" toLane="0" via=":2269951669_0_0" dir="t" state="M"/>
+
+    <connection from=":2269951669_0" to="-217685796" fromLane="0" toLane="0" dir="t" state="M"/>
+    <connection from=":255737628_0" to="217685796" fromLane="0" toLane="0" dir="t" state="M"/>
+
+</net>

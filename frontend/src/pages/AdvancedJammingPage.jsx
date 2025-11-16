@@ -1,21 +1,23 @@
 import axios from 'axios';
 import L from 'leaflet';
 import { useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 
-// --- Ícones (mesma configuração de antes) ---
+// --- ÍCONES (CORRIGIDO: Definições completas) ---
 const jammerIcon = L.divIcon({
   className: 'custom-div-icon',
   html: "<div style='background-color: #f00; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 5px #000;'></div>",
   iconSize: [12, 12],
   iconAnchor: [6, 6]
 });
+
 const startIcon = L.divIcon({
   className: 'custom-div-icon',
   html: "<div style='font-size: 24px; color: #00A900;'>🚗</div>",
   iconSize: [24, 24],
   iconAnchor: [12, 24]
 });
+
 const endIcon = L.divIcon({
   className: 'custom-div-icon',
   html: "<div style='font-size: 24px;'>🏁</div>",
@@ -23,31 +25,26 @@ const endIcon = L.divIcon({
   iconAnchor: [1, 24]
 });
 
-// --- Componente de Mapa: GeoJsonLayer (com logs de debug) ---
+
+// --- Componentes do Mapa (GeoJsonLayer, MapClickHandler - sem alteração) ---
 function GeoJsonLayer({ mapName, setMapBounds }) {
   const [geoData, setGeoData] = useState(null);
   const map = useMapEvents({});
 
   useEffect(() => {
-    if (!mapName) {
-      setGeoData(null); // Limpa o mapa se nenhum for selecionado
-      return;
-    }
+    if (!mapName) { setGeoData(null); return; }
     
     const geoJsonFile = mapName.replace('.net.xml', '.geojson');
     const geoJsonPath = `/maps/${geoJsonFile}`;
-    
     console.log(`Tentando carregar GeoJSON de: ${geoJsonPath}`);
 
     fetch(geoJsonPath)
       .then(res => {
-        if (!res.ok) {
-          throw new Error(`Falha ao buscar: ${res.status} ${res.statusText}`);
-        }
+        if (!res.ok) throw new Error(`404 - Ficheiro não encontrado: ${geoJsonPath}. Verifique 'frontend/public/maps/'`);
         return res.json();
       })
       .then(data => {
-        console.log(`GeoJSON ${geoJsonFile} carregado com sucesso.`);
+        console.log(`GeoJSON ${geoJsonFile} carregado.`);
         setGeoData(data);
         const bounds = L.geoJSON(data).getBounds();
         if (bounds.isValid()) {
@@ -56,49 +53,47 @@ function GeoJsonLayer({ mapName, setMapBounds }) {
         }
       })
       .catch(err => {
-        console.error(`ERRO AO CARREGAR O MAPA: ${geoJsonPath}. Verifique se o arquivo existe em 'frontend/public/maps/'`, err);
-        setGeoData(null); // Limpa dados antigos se falhar
+        console.error(`ERRO AO CARREGAR O MAPA: ${err.message}`);
+        setGeoData(null);
       });
-
   }, [mapName, map, setMapBounds]);
 
-  // Renderiza as ruas com uma cor cinza escura
   return geoData ? <GeoJSON data={geoData} style={{ color: "#666", weight: 2 }} /> : null;
 }
 
-// --- Componente de Mapa: MapClickHandler (sem mudanças) ---
 function MapClickHandler({ mode, onAddJammer, onSetRoutePoint }) {
   useMapEvents({
     click(e) {
       const latlng = e.latlng;
-      if (mode === 'jammer') {
-        onAddJammer(latlng);
-      } else if (mode === 'routeStart') {
-        onSetRoutePoint('start', latlng);
-      } else if (mode === 'routeEnd') {
-        onSetRoutePoint('end', latlng);
-      }
+      if (mode === 'jammer') onAddJammer(latlng);
+      else if (mode === 'routeStart') onSetRoutePoint('start', latlng);
+      else if (mode === 'routeEnd') onSetRoutePoint('end', latlng);
     },
   });
   return null;
 }
+
 
 // --- Componente Principal ---
 const API_BASE_URL = "http://localhost:8000";
 
 export default function AdvancedJammingPage() {
   
-  // --- STATE (Valores iniciais vazios ou 0) ---
   const [formData, setFormData] = useState({
     simulation_name: "",
-    map_name: "", // Começa vazio
-    simulation_time: "", // Começa vazio
+    map_name: "",
+    simulation_time: "",
+    random_seed: 1234,
     num_fixed_vehicles: 0,
     num_random_vehicles: 0,
     vehicle_distribution: "heterogeneous",
     communication_mode: "D2D",
     mitigation_active: false,
     reroute_on_attack: false,
+    
+    app_params: { send_interval_s: 0.1, packet_size_b: 256 },
+    net_params: { tx_power_dbm: 23, bitrate_mbps: 6 },
+    jamming_params: { start_time_s: 20, stop_time_s: 100, power_dbm: 20, strategy: "constant" }
   });
 
   const [availableMaps, setAvailableMaps] = useState([]);
@@ -109,62 +104,55 @@ export default function AdvancedJammingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
+  
+  // --- NOVO: State para o fundo do mapa ---
+  const [showMapBackground, setShowMapBackground] = useState(true);
 
-  // --- EFFECTS ---
   useEffect(() => {
     axios.get(`${API_BASE_URL}/api/maps`)
       .then(response => {
-        const netXmlMaps = response.data.filter(map => map.endsWith('.net.xml'));
-        setAvailableMaps(netXmlMaps);
-        // NÃO auto-seleciona mais o primeiro mapa
+        setAvailableMaps(response.data.filter(map => map.endsWith('.net.xml')))
       })
       .catch(err => setError("Failed to load maps."));
   }, []);
 
-  // --- HANDLERS ---
+  // --- Handlers (sem alteração) ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      // Salva o valor 'checked' para checkboxes, senão salva o 'value'
       [name]: type === 'checkbox' ? checked : value
     }));
   };
-
-  const handleMapClick = (latlng) => {
-    setJammers(prev => [...prev, latlng]);
-  };
   
+  const handleNestedChange = (group, name, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [name]: name === 'strategy' ? value : (parseFloat(value) || 0)
+      }
+    }))
+  };
+
+  const handleMapClick = (latlng) => { setJammers(prev => [...prev, latlng]); };
   const handleSetRoutePoint = (pointType, latlng) => {
     setFixedRoute(prev => ({ ...prev, [pointType]: latlng }));
     setPlacementMode('jammer');
   };
 
+  // --- HandleSubmit (sem alteração) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Converte os valores do formulário para números, usando 0 se estiverem vazios
     const simTime = parseInt(formData.simulation_time) || 0;
     const fixedVehicles = parseInt(formData.num_fixed_vehicles) || 0;
     const randomVehicles = parseInt(formData.num_random_vehicles) || 0;
 
-    // Validação
-    if (!formData.map_name) {
-        setError("Please select a map.");
-        return;
-    }
-    if (simTime <= 0) {
-        setError("Simulation Time must be greater than 0.");
-        return;
-    }
-    if (fixedVehicles > 0 && (!fixedRoute.start || !fixedRoute.end)) {
-        setError("Please define a start and end point for the fixed fleet.");
-        return;
-    }
-    if (fixedVehicles === 0 && randomVehicles === 0) {
-        setError("You must add at least one fixed or random vehicle.");
-        return;
-    }
+     if (!formData.map_name) { setError("Please select a map."); return; }
+     if (simTime <= 0) { setError("Simulation Time must be > 0."); return; }
+     if (fixedVehicles > 0 && (!fixedRoute.start || !fixedRoute.end)) { setError("Please define start/end for fixed fleet."); return; }
+     if (fixedVehicles === 0 && randomVehicles === 0) { setError("Add at least one vehicle."); return; }
     
     setLoading(true);
     setError(null);
@@ -172,11 +160,10 @@ export default function AdvancedJammingPage() {
 
     const payload = {
       ...formData,
-      // Envia os valores numéricos convertidos
       simulation_time: simTime,
       num_fixed_vehicles: fixedVehicles,
       num_random_vehicles: randomVehicles,
-      
+      random_seed: parseInt(formData.random_seed) || 1234,
       attack_placement: "fixed",
       jammers_list: jammers.map(j => ({ lat: j.lat, lng: j.lng })),
       fixed_routes_list: fixedVehicles > 0 ? [{
@@ -194,21 +181,18 @@ export default function AdvancedJammingPage() {
         payload,
         { responseType: 'blob' }
       )
-      
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const contentDisposition = response.headers['content-disposition'];
-      let filename = `${formData.simulation_name || 'simulation'}.zip`;
+      let filename = `${payload.simulation_name || 'simulation'}.zip`;
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
         if (filenameMatch.length === 2) filename = filenameMatch[1];
       }
-      
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
-      
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
       setDownloadUrl(true); 
@@ -246,12 +230,14 @@ export default function AdvancedJammingPage() {
             setJammers([]);
             setFixedRoute({ start: null, end: null });
             setError(null);
-            // Reseta o formulário
             setFormData({
-              simulation_name: "", map_name: "", simulation_time: "",
+              simulation_name: "", map_name: "", simulation_time: "", random_seed: 1234,
               num_fixed_vehicles: 0, num_random_vehicles: 0,
               vehicle_distribution: "heterogeneous", communication_mode: "D2D",
               mitigation_active: false, reroute_on_attack: false,
+              app_params: { send_interval_s: 0.1, packet_size_b: 256 },
+              net_params: { tx_power_dbm: 23, bitrate_mbps: 6 },
+              jamming_params: { start_time_s: 20, stop_time_s: 100, power_dbm: 20, strategy: "constant" }
             });
           }}
           className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-500"
@@ -265,13 +251,10 @@ export default function AdvancedJammingPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      {/* Coluna 1: Formulário */}
+      {/* Coluna 1: Formulário (sem alteração) */}
       <div className="lg:col-span-1">
-        <form onSubmit={handleSubmit} className="space-y-6 bg-gray-800 p-6 rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold text-white mb-4">
-            Advanced Simulation
-          </h1>
-          
+        <form onSubmit={handleSubmit} className="space-y-6 bg-gray-800 p-6 rounded-lg shadow-md h-full overflow-auto">
+          <h1 className="text-2xl font-bold text-white mb-4">Advanced Simulation</h1>
           {error && (
             <div className="bg-red-800 border border-red-600 text-red-100 px-4 py-3 rounded-md">
               <strong>Error:</strong> {error}
@@ -280,60 +263,78 @@ export default function AdvancedJammingPage() {
           
           <fieldset className="space-y-4">
             <legend className="text-xl font-semibold text-white mb-2">Setup</legend>
-            <label className="block">
-              <span className="text-gray-300">Simulation Name</span>
-              <input type="text" name="simulation_name" value={formData.simulation_name} onChange={handleChange} placeholder="ex: berlin_advanced_test" />
+            <label className="block"><span className="text-gray-300">Simulation Name</span>
+              <input type="text" name="simulation_name" value={formData.simulation_name} onChange={handleChange} placeholder="ex: advanced_test" />
             </label>
-            <label className="block">
-              <span className="text-gray-300">Map File (.net.xml)</span>
-              {/* Adicionado placeholder "Selecione um mapa" */}
+            <label className="block"><span className="text-gray-300">Map File (.net.xml)</span>
               <select name="map_name" value={formData.map_name} onChange={handleChange} required>
                 <option value="" disabled>Selecione um mapa...</option>
                 {availableMaps.map(map => <option key={map} value={map}>{map}</option>)}
               </select>
             </label>
+             <label className="block"><span className="text-gray-300">Simulation Time (s)</span>
+              <input type="number" name="simulation_time" value={formData.simulation_time} onChange={handleChange} placeholder="ex: 120" min="1" />
+            </label>
+            <label className="block"><span className="text-gray-300">Random Seed</span>
+              <input type="number" name="random_seed" value={formData.random_seed} onChange={handleChange} />
+            </label>
           </fieldset>
 
           <fieldset className="space-y-4">
-            <legend className="text-xl font-semibold text-white mb-2">Traffic & V2X</legend>
-             <label className="block">
-              <span className="text-gray-300">Simulation Time (s)</span>
-              <input type="number" name="simulation_time" value={formData.simulation_time} onChange={handleChange} placeholder="ex: 120" min="1" />
-            </label>
-             <label className="block">
-              <span className="text-gray-300">Fixed Fleet Vehicles (com Rota)</span>
+            <legend className="text-xl font-semibold text-white mb-2">Traffic</legend>
+             <label className="block"><span className="text-gray-300">Fixed Fleet Vehicles (com Rota)</span>
               <input type="number" name="num_fixed_vehicles" value={formData.num_fixed_vehicles} onChange={handleChange} min="0" />
             </label>
-             <label className="block">
-              <span className="text-gray-300">Random Vehicles (Preenchimento)</span>
+             <label className="block"><span className="text-gray-300">Random Vehicles (Preenchimento)</span>
               <input type="number" name="num_random_vehicles" value={formData.num_random_vehicles} onChange={handleChange} min="0" />
             </label>
-             <label className="block">
-              <span className="text-gray-300">Vehicle Distribution</span>
-              <select name="vehicle_distribution" value={formData.vehicle_distribution} onChange={handleChange}>
-                <option value="heterogeneous">Heterogeneous</option>
-                <option value="homogeneous">Homogeneous</option>
-              </select>
+          </fieldset>
+
+          <fieldset className="space-y-4">
+             <legend className="text-xl font-semibold text-white mb-2">V2X & Network</legend>
+             <label className="block"><span className="text-gray-300">Send Interval (s)</span>
+              <input type="number" step="0.1" value={formData.app_params.send_interval_s} onChange={e => handleNestedChange('app_params', 'send_interval_s', e.target.value)} />
+            </label>
+            <label className="block"><span className="text-gray-300">Packet Size (bytes)</span>
+              <input type="number" value={formData.app_params.packet_size_b} onChange={e => handleNestedChange('app_params', 'packet_size_b', e.target.value)} />
+            </label>
+            <label className="block"><span className="text-gray-300">Vehicle TX Power (dBm)</span>
+              <input type="number" value={formData.net_params.tx_power_dbm} onChange={e => handleNestedChange('net_params', 'tx_power_dbm', e.target.value)} />
             </label>
           </fieldset>
           
           <fieldset className="space-y-4">
+             <legend className="text-xl font-semibold text-white mb-2">Jamming Attack</legend>
+             <label className="block"><span className="text-gray-300">Start Time (s)</span>
+              <input type="number" value={formData.jamming_params.start_time_s} onChange={e => handleNestedChange('jamming_params', 'start_time_s', e.target.value)} />
+            </label>
+            <label className="block"><span className="text-gray-300">Stop Time (s)</span>
+              <input type="number" value={formData.jamming_params.stop_time_s} onChange={e => handleNestedChange('jamming_params', 'stop_time_s', e.target.value)} />
+            </label>
+            <label className="block"><span className="text-gray-300">Jammer Power (dBm)</span>
+              <input type="number" value={formData.jamming_params.power_dbm} onChange={e => handleNestedChange('jamming_params', 'power_dbm', e.target.Vvalue)} />
+            </label>
+            <label className="block"><span className="text-gray-300">Strategy</span>
+              <select value={formData.jamming_params.strategy} onChange={e => handleNestedChange('jamming_params', 'strategy', e.target.value)}>
+                <option value="constant">Constant</option><option value="reactive">Reactive</option><option value="random">Random</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <fieldset className="space-y-4">
             <legend className="text-xl font-semibold text-white mb-2">Mitigation</legend>
-            <label className="flex items-center space-x-2">
-              <input type="checkbox" name="mitigation_active" checked={formData.mitigation_active} onChange={handleChange} />
+            <label className="flex items-center space-x-2"><input type="checkbox" name="mitigation_active" checked={formData.mitigation_active} onChange={handleChange} />
               <span className="text-gray-300">Activate Mitigation</span>
             </label>
-             <label className="flex items-center space-x-2">
-              <input type="checkbox" name="reroute_on_attack" checked={formData.reroute_on_attack} onChange={handleChange} />
+             <label className="flex items-center space-x-2"><input type="checkbox" name="reroute_on_attack" checked={formData.reroute_on_attack} onChange={handleChange} />
               <span className="text-gray-300">Reroute on Attack</span>
             </label>
           </fieldset>
 
           <div className="pt-4">
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 disabled:opacity-50"
+              type="submit" disabled={loading}
+              className="w-full px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-500 disabled:opacity-50"
             >
               {loading ? "Generating..." : "Generate Advanced Simulation"}
             </button>
@@ -343,33 +344,25 @@ export default function AdvancedJammingPage() {
 
       {/* Coluna 2: Mapa e Controles */}
       <div className="lg:col-span-2 space-y-4">
+        {/* Controles do Mapa (COM O NOVO CHECKBOX) */}
         <div className="bg-gray-800 p-4 rounded-lg shadow-md flex justify-between items-center">
-          <div>
-            <span className="text-lg font-semibold text-white mr-4">Map Mode:</span>
-            <div className="inline-flex rounded-md shadow-sm" role="group">
-              <button type="button" onClick={() => setPlacementMode('jammer')} className={`px-4 py-2 text-sm font-medium rounded-l-lg ${getModeClass('jammer')}`}>
-                Add Jammer
-              </button>
-              <button type="button" onClick={() => setPlacementMode('routeStart')} className={`px-4 py-2 text-sm font-medium border-t border-b border-gray-700 ${getModeClass('routeStart')}`}>
-                Set Route Start
-              </button>
-              <button type="button" onClick={() => setPlacementMode('routeEnd')} className={`px-4 py-2 text-sm font-medium rounded-r-lg ${getModeClass('routeEnd')}`}>
-                Set Route End
-              </button>
+            <div>
+                <span className="text-lg font-semibold text-white mr-4">Map Mode:</span>
+                <div className="inline-flex rounded-md shadow-sm" role="group">
+                <button type="button" onClick={() => setPlacementMode('jammer')} className={`px-4 py-2 text-sm font-medium rounded-l-lg ${getModeClass('jammer')}`}>Add Jammer</button>
+                <button type="button" onClick={() => setPlacementMode('routeStart')} className={`px-4 py-2 text-sm font-medium border-t border-b border-gray-700 ${getModeClass('routeStart')}`}>Set Route Start</button>
+                <button type="button" onClick={() => setPlacementMode('routeEnd')} className={`px-4 py-2 text-sm font-medium rounded-r-lg ${getModeClass('routeEnd')}`}>Set Route End</button>
+                </div>
             </div>
-          </div>
-          <div className='flex items-center space-x-4'>
-            <span className="text-lg font-semibold text-indigo-300">
-              Jammers: {jammers.length}
-            </span>
-            <button
-              type="button"
-              onClick={() => { setJammers([]); setFixedRoute({ start: null, end: null }); }}
-              className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300"
-            >
-              Clear Pins
-            </button>
-          </div>
+            <div className='flex items-center space-x-4'>
+                {/* --- NOVO CHECKBOX DE BACKGROUND --- */}
+                <label className="flex items-center space-x-2">
+                  <input type="checkbox" checked={showMapBackground} onChange={(e) => setShowMapBackground(e.target.checked)} />
+                  <span className="text-gray-300 text-sm">Show Background</span>
+                </label>
+                <span className="text-lg font-semibold text-indigo-300">Jammers: {jammers.length}</span>
+                <button type="button" onClick={() => { setJammers([]); setFixedRoute({ start: null, end: null }); }} className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300">Clear Pins</button>
+            </div>
         </div>
 
         {/* O Mapa */}
@@ -377,13 +370,22 @@ export default function AdvancedJammingPage() {
           <MapContainer
             center={[-15.79, -47.88]}
             zoom={4}
-            // Fundo preto e sem o "mapa real"
             style={{ height: '100%', width: '100%', backgroundColor: '#111' }}
           >
-            {/* O <TileLayer> FOI REMOVIDO DAQUI
-            */}
+            {/* --- NOVO: Renderização Condicional do Fundo --- */}
+            {showMapBackground && (
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+            )}
             
-            <GeoJsonLayer mapName={formData.map_name} setMapBounds={setMapBounds} />
+            {/* CORREÇÃO DO BUG: A 'key' força a recriação do mapa ao mudar */}
+            <GeoJsonLayer 
+              key={formData.map_name} 
+              mapName={formData.map_name} 
+              setMapBounds={setMapBounds} 
+            />
             
             <MapClickHandler
               mode={placementMode}
@@ -391,22 +393,9 @@ export default function AdvancedJammingPage() {
               onSetRoutePoint={handleSetRoutePoint}
             />
 
-            {jammers.map((pos, idx) => (
-              <Marker key={`j-${idx}`} position={pos} icon={jammerIcon}>
-                <Popup>Jammer #{idx + 1}</Popup>
-              </Marker>
-            ))}
-            
-            {fixedRoute.start && (
-              <Marker position={fixedRoute.start} icon={startIcon}>
-                <Popup>Fixed Route Start</Popup>
-              </Marker>
-            )}
-            {fixedRoute.end && (
-              <Marker position={fixedRoute.end} icon={endIcon}>
-                <Popup>Fixed Route End</Popup>
-              </Marker>
-            )}
+            {jammers.map((pos, idx) => (<Marker key={`j-${idx}`} position={pos} icon={jammerIcon}><Popup>Jammer #{idx + 1}</Popup></Marker>))}
+            {fixedRoute.start && (<Marker position={fixedRoute.start} icon={startIcon}><Popup>Fixed Route Start</Popup></Marker>)}
+            {fixedRoute.end && (<Marker position={fixedRoute.end} icon={endIcon}><Popup>Fixed Route End</Popup></Marker>)}
 
           </MapContainer>
         </div>

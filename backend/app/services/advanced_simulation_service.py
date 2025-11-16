@@ -165,26 +165,35 @@ class AdvancedSimulationService(SimulationService):
         Gera o omnetpp.ini para o cenário avançado.
         """
         
-        # --- Configuração de Ataque (Jammer) ---
+# --- Parâmetros V2X (Novos) ---
+        app_cfg = f"""
+*.host[*].app[0].typename = "V2XApp"
+*.host[*].app[0].sendInterval = {payload.app_params.send_interval_s}s
+*.host[*].app[0].packetSize = {payload.app_params.packet_size_b}B
+"""
+        net_cfg = f"""
+*.host[*].phy.txPower = {payload.net_params.tx_power_dbm}dBm
+*.connectionManager.bitrate = {payload.net_params.bitrate_mbps}Mbps
+"""
+
+        # --- Configuração de Ataque (Jammer) (Atualizado) ---
         attacker_config = ""
-        if payload.jammers_list:
+        if payload.jammers_list and payload.jamming_params:
+            jp = payload.jamming_params
             attacker_config = f"*.numAttacker = {len(payload.jammers_list)}\n"
             
             for i, jammer in enumerate(payload.jammers_list):
                 try:
-                    # Converte Lat/Lng para X,Y
                     x, y = self._convert_latlng_to_xy(jammer)
-                    
                     attacker_config += f"*.attacker[{i}].typename = \"DroneJammer\"\n"
                     attacker_config += f"*.attacker[{i}].mobility.typename = \"StaticGridMobility\"\n"
-                    attacker_config += f"*.attacker[{i}].mobility.numHosts = 1\n"
-                    # Define a posição X, Y, Z (ex: 10m de altura)
                     attacker_config += f"*.attacker[{i}].mobility.deployment = \"fixed({x}, {y}, 10)\"\n" 
                     attacker_config += f"*.attacker[{i}].app[0].typename = \"JammerApp\"\n"
-                    attacker_config += f"*.attacker[{i}].app[0].startTime = 20s\n" # (Pode vir do payload)
-                    attacker_config += f"*.attacker[{i}].app[0].stopTime = 100s\n" # (Pode vir do payload)
-                    attacker_config += f"*.attacker[{i}].app[0].power = 20mW\n" # (Pode vir do payload)
-                    attacker_config += "\n"
+                    # --- Parâmetros de ataque aplicados a cada jammer ---
+                    attacker_config += f"*.attacker[{i}].app[0].startTime = {jp.start_time_s}s\n"
+                    attacker_config += f"*.attacker[i].app[0].stopTime = {jp.stop_time_s}s\n"
+                    attacker_config += f"*.attacker[{i}].app[0].power = {jp.power_dbm}mW\n"
+                    attacker_config += f"*.attacker[{i}].app[0].strategy = \"{jp.strategy}\"\n\n"
                 
                 except Exception as e:
                      logging.warning(f"Skipping jammer {i}: {e}")
@@ -211,16 +220,12 @@ seed-set = {payload.random_seed}
 # --- Scenario ---
 *.numHosts = {total_vehicles}
 *.host[*].typename = "NRCar"
-
-# --- Mobility ---
 *.host[*].mobility.typename = "VeinsInetMobility"
 
-# --- Applications (exemplo) ---
+# --- Applications & Network ---
 *.host[*].numApps = 1
-*.host[*].app[0].typename = "V2XApp"
-
-# --- Ataque (Jamming) ---
-{attacker_config}
+{app_cfg}
+{net_cfg}
 
 # --- 5G & Mitigation ---
 *.host[*].masterId = 100
@@ -229,6 +234,9 @@ seed-set = {payload.random_seed}
 *.host[*].isRsu = false
 *.host[*].mitigation.active = {"true" if payload.mitigation_active else "false"}
 *.host[*].mitigation.rerouteOnAttack = {"true" if payload.reroute_on_attack else "false"}
+
+# --- Attack (Jamming) ---
+{attacker_config}
 
 # --- Métricas ---
 **.scalar-recording = true
