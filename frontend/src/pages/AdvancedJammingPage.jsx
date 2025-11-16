@@ -1,7 +1,7 @@
 import axios from 'axios';
 import L from 'leaflet';
 import { useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, Popup, useMapEvents } from 'react-leaflet';
 
 // --- Ícones (mesma configuração de antes) ---
 const jammerIcon = L.divIcon({
@@ -23,19 +23,31 @@ const endIcon = L.divIcon({
   iconAnchor: [1, 24]
 });
 
-// --- Componentes Internos do Mapa (GeoJsonLayer, MapClickHandler - sem mudanças) ---
-
+// --- Componente de Mapa: GeoJsonLayer (com logs de debug) ---
 function GeoJsonLayer({ mapName, setMapBounds }) {
   const [geoData, setGeoData] = useState(null);
   const map = useMapEvents({});
 
   useEffect(() => {
-    if (!mapName) return;
-    const geoJsonFile = mapName.replace('.net.xml', '.geojson');
+    if (!mapName) {
+      setGeoData(null); // Limpa o mapa se nenhum for selecionado
+      return;
+    }
     
-    fetch(`/maps/${geoJsonFile}`) // Busca de /public/maps/
-      .then(res => res.json())
+    const geoJsonFile = mapName.replace('.net.xml', '.geojson');
+    const geoJsonPath = `/maps/${geoJsonFile}`;
+    
+    console.log(`Tentando carregar GeoJSON de: ${geoJsonPath}`);
+
+    fetch(geoJsonPath)
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Falha ao buscar: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      })
       .then(data => {
+        console.log(`GeoJSON ${geoJsonFile} carregado com sucesso.`);
         setGeoData(data);
         const bounds = L.geoJSON(data).getBounds();
         if (bounds.isValid()) {
@@ -44,15 +56,17 @@ function GeoJsonLayer({ mapName, setMapBounds }) {
         }
       })
       .catch(err => {
-        console.error("Failed to load GeoJSON:", geoJsonFile, err);
-        setGeoData(null);
+        console.error(`ERRO AO CARREGAR O MAPA: ${geoJsonPath}. Verifique se o arquivo existe em 'frontend/public/maps/'`, err);
+        setGeoData(null); // Limpa dados antigos se falhar
       });
 
   }, [mapName, map, setMapBounds]);
 
-  return geoData ? <GeoJSON data={geoData} style={{ color: "#444", weight: 2 }} /> : null;
+  // Renderiza as ruas com uma cor cinza escura
+  return geoData ? <GeoJSON data={geoData} style={{ color: "#666", weight: 2 }} /> : null;
 }
 
+// --- Componente de Mapa: MapClickHandler (sem mudanças) ---
 function MapClickHandler({ mode, onAddJammer, onSetRoutePoint }) {
   useMapEvents({
     click(e) {
@@ -74,14 +88,13 @@ const API_BASE_URL = "http://localhost:8000";
 
 export default function AdvancedJammingPage() {
   
+  // --- STATE (Valores iniciais vazios ou 0) ---
   const [formData, setFormData] = useState({
-    simulation_name: "advanced_jamming_test",
-    map_name: "",
-    simulation_time: 120,
-    // --- Campos de Tráfego Atualizados ---
-    num_fixed_vehicles: 1, // Novo
-    num_random_vehicles: 49, // Novo
-    // ---
+    simulation_name: "",
+    map_name: "", // Começa vazio
+    simulation_time: "", // Começa vazio
+    num_fixed_vehicles: 0,
+    num_random_vehicles: 0,
     vehicle_distribution: "heterogeneous",
     communication_mode: "D2D",
     mitigation_active: false,
@@ -95,25 +108,26 @@ export default function AdvancedJammingPage() {
   const [fixedRoute, setFixedRoute] = useState({ start: null, end: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [downloadUrl, setDownloadUrl] = useState(null); // Para o botão de "Gerar Nova"
+  const [downloadUrl, setDownloadUrl] = useState(null);
 
+  // --- EFFECTS ---
   useEffect(() => {
     axios.get(`${API_BASE_URL}/api/maps`)
       .then(response => {
         const netXmlMaps = response.data.filter(map => map.endsWith('.net.xml'));
         setAvailableMaps(netXmlMaps);
-        if (netXmlMaps.length > 0) {
-          setFormData(prev => ({ ...prev, map_name: netXmlMaps[0] }));
-        }
+        // NÃO auto-seleciona mais o primeiro mapa
       })
       .catch(err => setError("Failed to load maps."));
   }, []);
 
+  // --- HANDLERS ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value) : value)
+      // Salva o valor 'checked' para checkboxes, senão salva o 'value'
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
@@ -123,14 +137,32 @@ export default function AdvancedJammingPage() {
   
   const handleSetRoutePoint = (pointType, latlng) => {
     setFixedRoute(prev => ({ ...prev, [pointType]: latlng }));
-    setPlacementMode('jammer'); // Volta para o modo jammer
+    setPlacementMode('jammer');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (formData.num_fixed_vehicles > 0 && (!fixedRoute.start || !fixedRoute.end)) {
+    // Converte os valores do formulário para números, usando 0 se estiverem vazios
+    const simTime = parseInt(formData.simulation_time) || 0;
+    const fixedVehicles = parseInt(formData.num_fixed_vehicles) || 0;
+    const randomVehicles = parseInt(formData.num_random_vehicles) || 0;
+
+    // Validação
+    if (!formData.map_name) {
+        setError("Please select a map.");
+        return;
+    }
+    if (simTime <= 0) {
+        setError("Simulation Time must be greater than 0.");
+        return;
+    }
+    if (fixedVehicles > 0 && (!fixedRoute.start || !fixedRoute.end)) {
         setError("Please define a start and end point for the fixed fleet.");
+        return;
+    }
+    if (fixedVehicles === 0 && randomVehicles === 0) {
+        setError("You must add at least one fixed or random vehicle.");
         return;
     }
     
@@ -140,13 +172,17 @@ export default function AdvancedJammingPage() {
 
     const payload = {
       ...formData,
-      // Dados do mapa
+      // Envia os valores numéricos convertidos
+      simulation_time: simTime,
+      num_fixed_vehicles: fixedVehicles,
+      num_random_vehicles: randomVehicles,
+      
       attack_placement: "fixed",
-      jammers_list: jammers.map(j => ({ lat: j.lat, lng: j.lng })), // Envia como objeto
-      fixed_routes_list: formData.num_fixed_vehicles > 0 ? [{
+      jammers_list: jammers.map(j => ({ lat: j.lat, lng: j.lng })),
+      fixed_routes_list: fixedVehicles > 0 ? [{
         start: { lat: fixedRoute.start.lat, lng: fixedRoute.start.lng },
         end: { lat: fixedRoute.end.lat, lng: fixedRoute.end.lng },
-        count: formData.num_fixed_vehicles
+        count: fixedVehicles
       }] : [],
     };
     
@@ -161,9 +197,9 @@ export default function AdvancedJammingPage() {
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const contentDisposition = response.headers['content-disposition'];
-      let filename = `${formData.simulation_name}.zip`;
+      let filename = `${formData.simulation_name || 'simulation'}.zip`;
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
         if (filenameMatch.length === 2) filename = filenameMatch[1];
       }
       
@@ -175,7 +211,7 @@ export default function AdvancedJammingPage() {
       
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
-      setDownloadUrl(true); // Mostra o botão de "Gerar Nova"
+      setDownloadUrl(true); 
       
     } catch (err) {
       console.error(err);
@@ -198,7 +234,8 @@ export default function AdvancedJammingPage() {
       : 'bg-gray-600 text-gray-300 hover:bg-gray-500';
   };
   
-  // Se o download foi feito, mostra o botão "Gerar Nova"
+  // --- RENDER ---
+  
   if (downloadUrl) {
     return (
       <div className="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
@@ -209,6 +246,13 @@ export default function AdvancedJammingPage() {
             setJammers([]);
             setFixedRoute({ start: null, end: null });
             setError(null);
+            // Reseta o formulário
+            setFormData({
+              simulation_name: "", map_name: "", simulation_time: "",
+              num_fixed_vehicles: 0, num_random_vehicles: 0,
+              vehicle_distribution: "heterogeneous", communication_mode: "D2D",
+              mitigation_active: false, reroute_on_attack: false,
+            });
           }}
           className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-500"
         >
@@ -218,7 +262,6 @@ export default function AdvancedJammingPage() {
     )
   }
 
-  // Renderização principal do formulário e mapa
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
@@ -239,11 +282,13 @@ export default function AdvancedJammingPage() {
             <legend className="text-xl font-semibold text-white mb-2">Setup</legend>
             <label className="block">
               <span className="text-gray-300">Simulation Name</span>
-              <input type="text" name="simulation_name" value={formData.simulation_name} onChange={handleChange} required />
+              <input type="text" name="simulation_name" value={formData.simulation_name} onChange={handleChange} placeholder="ex: berlin_advanced_test" />
             </label>
             <label className="block">
               <span className="text-gray-300">Map File (.net.xml)</span>
+              {/* Adicionado placeholder "Selecione um mapa" */}
               <select name="map_name" value={formData.map_name} onChange={handleChange} required>
+                <option value="" disabled>Selecione um mapa...</option>
                 {availableMaps.map(map => <option key={map} value={map}>{map}</option>)}
               </select>
             </label>
@@ -253,18 +298,16 @@ export default function AdvancedJammingPage() {
             <legend className="text-xl font-semibold text-white mb-2">Traffic & V2X</legend>
              <label className="block">
               <span className="text-gray-300">Simulation Time (s)</span>
-              <input type="number" name="simulation_time" value={formData.simulation_time} onChange={handleChange} min="1" required />
+              <input type="number" name="simulation_time" value={formData.simulation_time} onChange={handleChange} placeholder="ex: 120" min="1" />
             </label>
-             {/* --- NOVOS CAMPOS DE TRÁFEGO --- */}
              <label className="block">
               <span className="text-gray-300">Fixed Fleet Vehicles (com Rota)</span>
-              <input type="number" name="num_fixed_vehicles" value={formData.num_fixed_vehicles} onChange={handleChange} min="0" required />
+              <input type="number" name="num_fixed_vehicles" value={formData.num_fixed_vehicles} onChange={handleChange} min="0" />
             </label>
              <label className="block">
               <span className="text-gray-300">Random Vehicles (Preenchimento)</span>
-              <input type="number" name="num_random_vehicles" value={formData.num_random_vehicles} onChange={handleChange} min="0" required />
+              <input type="number" name="num_random_vehicles" value={formData.num_random_vehicles} onChange={handleChange} min="0" />
             </label>
-            {/* --- FIM DOS NOVOS CAMPOS --- */}
              <label className="block">
               <span className="text-gray-300">Vehicle Distribution</span>
               <select name="vehicle_distribution" value={formData.vehicle_distribution} onChange={handleChange}>
@@ -300,7 +343,6 @@ export default function AdvancedJammingPage() {
 
       {/* Coluna 2: Mapa e Controles */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Controles do Mapa */}
         <div className="bg-gray-800 p-4 rounded-lg shadow-md flex justify-between items-center">
           <div>
             <span className="text-lg font-semibold text-white mr-4">Map Mode:</span>
@@ -317,7 +359,6 @@ export default function AdvancedJammingPage() {
             </div>
           </div>
           <div className='flex items-center space-x-4'>
-            {/* --- NOVO CONTADOR DE JAMMERS --- */}
             <span className="text-lg font-semibold text-indigo-300">
               Jammers: {jammers.length}
             </span>
@@ -336,12 +377,11 @@ export default function AdvancedJammingPage() {
           <MapContainer
             center={[-15.79, -47.88]}
             zoom={4}
-            style={{ height: '100%', width: '100%', backgroundColor: '#333' }}
+            // Fundo preto e sem o "mapa real"
+            style={{ height: '100%', width: '100%', backgroundColor: '#111' }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+            {/* O <TileLayer> FOI REMOVIDO DAQUI
+            */}
             
             <GeoJsonLayer mapName={formData.map_name} setMapBounds={setMapBounds} />
             
