@@ -1,9 +1,8 @@
-import AboutMapsModal from "../components/AboutMapsModal";
 
 export default function AboutPage() {
   return (
     <div className="prose prose-invert max-w-none">
-         <AboutMapsModal />
+      <h1>About the Simulation Configuration</h1>
 
       <h2>About the Simulation Parameters</h2>
       <p>This page explains the meaning of the main configuration fields used in the simulation forms.</p>

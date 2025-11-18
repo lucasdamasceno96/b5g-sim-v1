@@ -1,3 +1,4 @@
+import AboutMapsModal from "../components/AboutMapsModal";
 export default function MapGeneratorPage() {
   // No futuro:
   // const [city, setCity] = useState("")
@@ -28,6 +29,8 @@ export default function MapGeneratorPage() {
         any city on OpenStreetMap.
       </p>
       <p className="mt-2 text-yellow-400">(Work in Progress)</p>
+
+      <AboutMapsModal />
     </div>
   )
 }
