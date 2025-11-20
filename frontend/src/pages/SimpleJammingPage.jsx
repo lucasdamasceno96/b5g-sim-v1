@@ -5,7 +5,7 @@ const API_BASE_URL = "http://localhost:8000"
 
 export default function SimpleJammingPage() {
   
-  // --- State Inicial (Vazio e Aninhado) ---
+  // --- Initial State (Empty and Nested) ---
   const [formData, setFormData] = useState({
     simulation_name: "",
     map_name: "",
@@ -38,7 +38,7 @@ export default function SimpleJammingPage() {
   const [downloadUrl, setDownloadUrl] = useState(null)
 
   useEffect(() => {
-    // Carrega mapas
+    // Load maps
     axios.get(`${API_BASE_URL}/api/maps`)
       .then(response => {
         setAvailableMaps(response.data.filter(map => map.endsWith('.net.xml')))
@@ -46,7 +46,7 @@ export default function SimpleJammingPage() {
       .catch(err => setError("Failed to load maps."))
   }, [])
 
-  // --- Handlers Genéricos ---
+  // --- Generic Handlers ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     setFormData(prev => ({
@@ -55,13 +55,13 @@ export default function SimpleJammingPage() {
     }))
   }
 
-  // Handler para campos aninhados (ex: app_params.send_interval_s)
+  // Handler for nested fields (e.g., app_params.send_interval_s)
   const handleNestedChange = (group, name, value) => {
     setFormData(prev => ({
       ...prev,
       [group]: {
         ...prev[group],
-        [name]: parseFloat(value) || 0 // Converte para número
+        [name]: parseFloat(value) || 0 // Convert to number
       }
     }))
   }
@@ -72,7 +72,7 @@ export default function SimpleJammingPage() {
     setError(null);
     setDownloadUrl(null);
     
-    // Converte campos de texto para números antes de enviar
+    // Convert text fields to numbers before sending
     const payload = {
         ...formData,
         simulation_time: parseInt(formData.simulation_time) || 0,
@@ -89,7 +89,7 @@ export default function SimpleJammingPage() {
         { responseType: 'blob' }
       )
       
-      // ... (lógica de download do blob - sem alteração) ...
+      // ... (blob download logic - unchanged) ...
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const contentDisposition = response.headers['content-disposition'];
       let filename = `${payload.simulation_name || 'simulation'}.zip`;
@@ -107,7 +107,7 @@ export default function SimpleJammingPage() {
       setDownloadUrl(true);
       
     } catch (err) {
-      // ... (lógica de erro - sem alteração) ...
+      // ... (error logic - unchanged) ...
       console.error(err);
       if (err.response && err.response.data) {
          err.response.data.text().then(text => {
@@ -122,13 +122,13 @@ export default function SimpleJammingPage() {
     }
   }
 
-  // --- Renderização ---
+  // --- Rendering ---
   if (downloadUrl) {
     return (
       <div className="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
         <h2 className="text-2xl font-bold text-green-400 mb-4">Simulation ZIP Generated!</h2>
         <button
-          onClick={() => setDownloadUrl(null)} // Simplificado para voltar
+          onClick={() => setDownloadUrl(null)} // Simplified to go back
           className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-500"
         >
           Generate New Simulation
@@ -149,10 +149,10 @@ export default function SimpleJammingPage() {
         </div>
       )}
 
-      {/* --- Duas Colunas: Setup e V2X --- */}
+      {/* --- Two Columns: Setup and V2X --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        {/* Coluna 1: Setup */}
+        {/* Column 1: Setup */}
         <fieldset className="bg-gray-800 p-6 rounded-lg shadow-md space-y-4">
           <legend className="text-xl font-semibold text-white mb-4">General Setup</legend>
           <label className="block">
@@ -162,7 +162,7 @@ export default function SimpleJammingPage() {
           <label className="block">
             <span className="text-gray-300">Map Name</span>
             <select name="map_name" value={formData.map_name} onChange={handleChange} required>
-              <option value="" disabled>Selecione um mapa...</option>
+              <option value="" disabled>Select a map...</option>
               {availableMaps.map(map => <option key={map} value={map}>{map}</option>)}
             </select>
           </label>
@@ -180,7 +180,7 @@ export default function SimpleJammingPage() {
           </label>
         </fieldset>
 
-        {/* Coluna 2: V2X Params */}
+        {/* Column 2: V2X Params */}
         <div className="space-y-8">
           <fieldset className="bg-gray-800 p-6 rounded-lg shadow-md space-y-4">
             <legend className="text-xl font-semibold text-white mb-4">Application Parameters</legend>
@@ -208,7 +208,7 @@ export default function SimpleJammingPage() {
         </div>
       </div>
 
-      {/* --- Seção de Ataque (Ocupa a largura inteira) --- */}
+      {/* --- Attack Section (Full Width) --- */}
       <fieldset className="bg-gray-800 p-6 rounded-lg shadow-md">
         <legend className="text-xl font-semibold text-white mb-4">Attack: Jamming</legend>
         
@@ -219,7 +219,7 @@ export default function SimpleJammingPage() {
             checked={formData.execute_with_attack}
             onChange={handleChange}
           />
-          <span className="text-gray-300">Enable Jamming Attack (Posicionado no Centro)</span>
+          <span className="text-gray-300">Enable Jamming Attack (Positioned at Center)</span>
         </label>
         
         {formData.execute_with_attack && (
@@ -248,7 +248,7 @@ export default function SimpleJammingPage() {
         )}
       </fieldset>
 
-      {/* --- Ações --- */}
+      {/* --- Actions --- */}
       <div className="flex justify-end pt-4">
         <button
           type="submit"

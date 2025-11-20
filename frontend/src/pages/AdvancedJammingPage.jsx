@@ -3,7 +3,7 @@ import L from 'leaflet';
 import { useEffect, useState } from 'react';
 import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 
-// --- ÍCONES (CORRIGIDO: Definições completas) ---
+// --- ICONS (FIXED: Complete definitions) ---
 const jammerIcon = L.divIcon({
   className: 'custom-div-icon',
   html: "<div style='background-color: #f00; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 5px #000;'></div>",
@@ -26,7 +26,7 @@ const endIcon = L.divIcon({
 });
 
 
-// --- Componentes do Mapa (GeoJsonLayer, MapClickHandler - sem alteração) ---
+// --- Map Components (GeoJsonLayer, MapClickHandler - unchanged logic) ---
 function GeoJsonLayer({ mapName, setMapBounds }) {
   const [geoData, setGeoData] = useState(null);
   const map = useMapEvents({});
@@ -36,15 +36,15 @@ function GeoJsonLayer({ mapName, setMapBounds }) {
     
     const geoJsonFile = mapName.replace('.net.xml', '.geojson');
     const geoJsonPath = `/maps/${geoJsonFile}`;
-    console.log(`Tentando carregar GeoJSON de: ${geoJsonPath}`);
+    console.log(`Attempting to load GeoJSON from: ${geoJsonPath}`);
 
     fetch(geoJsonPath)
       .then(res => {
-        if (!res.ok) throw new Error(`404 - Ficheiro não encontrado: ${geoJsonPath}. Verifique 'frontend/public/maps/'`);
+        if (!res.ok) throw new Error(`404 - File not found: ${geoJsonPath}. Check 'frontend/public/maps/'`);
         return res.json();
       })
       .then(data => {
-        console.log(`GeoJSON ${geoJsonFile} carregado.`);
+        console.log(`GeoJSON ${geoJsonFile} loaded.`);
         setGeoData(data);
         const bounds = L.geoJSON(data).getBounds();
         if (bounds.isValid()) {
@@ -53,7 +53,7 @@ function GeoJsonLayer({ mapName, setMapBounds }) {
         }
       })
       .catch(err => {
-        console.error(`ERRO AO CARREGAR O MAPA: ${err.message}`);
+        console.error(`ERROR LOADING MAP: ${err.message}`);
         setGeoData(null);
       });
   }, [mapName, map, setMapBounds]);
@@ -74,7 +74,7 @@ function MapClickHandler({ mode, onAddJammer, onSetRoutePoint }) {
 }
 
 
-// --- Componente Principal ---
+// --- Main Component ---
 const API_BASE_URL = "http://localhost:8000";
 
 export default function AdvancedJammingPage() {
@@ -105,7 +105,7 @@ export default function AdvancedJammingPage() {
   const [error, setError] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
   
-  // --- NOVO: State para o fundo do mapa ---
+  // --- NEW: State for map background ---
   const [showMapBackground, setShowMapBackground] = useState(true);
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export default function AdvancedJammingPage() {
       .catch(err => setError("Failed to load maps."));
   }, []);
 
-  // --- Handlers (sem alteração) ---
+  // --- Handlers (unchanged) ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
@@ -141,7 +141,7 @@ export default function AdvancedJammingPage() {
     setPlacementMode('jammer');
   };
 
-  // --- HandleSubmit (sem alteração) ---
+  // --- HandleSubmit (unchanged) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -251,7 +251,7 @@ export default function AdvancedJammingPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      {/* Coluna 1: Formulário (sem alteração) */}
+      {/* Column 1: Form (unchanged) */}
       <div className="lg:col-span-1">
         <form onSubmit={handleSubmit} className="space-y-6 bg-gray-800 p-6 rounded-lg shadow-md h-full overflow-auto">
           <h1 className="text-2xl font-bold text-white mb-4">Advanced Simulation</h1>
@@ -268,7 +268,7 @@ export default function AdvancedJammingPage() {
             </label>
             <label className="block"><span className="text-gray-300">Map File (.net.xml)</span>
               <select name="map_name" value={formData.map_name} onChange={handleChange} required>
-                <option value="" disabled>Selecione um mapa...</option>
+                <option value="" disabled>Select a map...</option>
                 {availableMaps.map(map => <option key={map} value={map}>{map}</option>)}
               </select>
             </label>
@@ -282,10 +282,10 @@ export default function AdvancedJammingPage() {
 
           <fieldset className="space-y-4">
             <legend className="text-xl font-semibold text-white mb-2">Traffic</legend>
-             <label className="block"><span className="text-gray-300">Fixed Fleet Vehicles (com Rota)</span>
+             <label className="block"><span className="text-gray-300">Fixed Fleet Vehicles (with Route)</span>
               <input type="number" name="num_fixed_vehicles" value={formData.num_fixed_vehicles} onChange={handleChange} min="0" />
             </label>
-             <label className="block"><span className="text-gray-300">Random Vehicles (Preenchimento)</span>
+             <label className="block"><span className="text-gray-300">Random Vehicles (Fill)</span>
               <input type="number" name="num_random_vehicles" value={formData.num_random_vehicles} onChange={handleChange} min="0" />
             </label>
           </fieldset>
@@ -342,9 +342,9 @@ export default function AdvancedJammingPage() {
         </form>
       </div>
 
-      {/* Coluna 2: Mapa e Controles */}
+      {/* Column 2: Map and Controls */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Controles do Mapa (COM O NOVO CHECKBOX) */}
+        {/* Map Controls (WITH NEW CHECKBOX) */}
         <div className="bg-gray-800 p-4 rounded-lg shadow-md flex justify-between items-center">
             <div>
                 <span className="text-lg font-semibold text-white mr-4">Map Mode:</span>
@@ -355,7 +355,7 @@ export default function AdvancedJammingPage() {
                 </div>
             </div>
             <div className='flex items-center space-x-4'>
-                {/* --- NOVO CHECKBOX DE BACKGROUND --- */}
+                {/* --- NEW BACKGROUND CHECKBOX --- */}
                 <label className="flex items-center space-x-2">
                   <input type="checkbox" checked={showMapBackground} onChange={(e) => setShowMapBackground(e.target.checked)} />
                   <span className="text-gray-300 text-sm">Show Background</span>
@@ -365,14 +365,14 @@ export default function AdvancedJammingPage() {
             </div>
         </div>
 
-        {/* O Mapa */}
+        {/* The Map */}
         <div className="h-[600px] rounded-lg overflow-hidden shadow-lg">
           <MapContainer
             center={[-15.79, -47.88]}
             zoom={4}
             style={{ height: '100%', width: '100%', backgroundColor: '#111' }}
           >
-            {/* --- NOVO: Renderização Condicional do Fundo --- */}
+            {/* --- NEW: Conditional Background Rendering --- */}
             {showMapBackground && (
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -380,7 +380,7 @@ export default function AdvancedJammingPage() {
               />
             )}
             
-            {/* CORREÇÃO DO BUG: A 'key' força a recriação do mapa ao mudar */}
+            {/* BUG FIX: 'key' forces map recreation on change */}
             <GeoJsonLayer 
               key={formData.map_name} 
               mapName={formData.map_name} 
