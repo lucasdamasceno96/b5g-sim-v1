@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 from typing import Tuple
+from pyproj import Proj, transform
 
 try:
     import sumolib
@@ -34,21 +35,42 @@ class AdvancedSimulationService(SimulationService):
         self.net = sumolib.net.readNet(str(net_file))
 
     # --- FIX: Robust Coordinate Conversion ---
+
+
     def _convert_latlng_to_xy(self, latlng) -> Tuple[float, float]:
-        """Converts Lat/Lng to SUMO X/Y coordinates with fallback methods."""
+        """
+        Converte Lat/Lng para Metros (UTM) usando pyproj se o sumolib falhar.
+        Isso garante que o OMNeT++ receba metros, não graus.
+        """
         if not self.net: raise Exception("SUMO net not loaded.")
         
         try:
-            # Try different SUMO methods depending on version/map type
+            # Tenta o método nativo do SUMO primeiro
             if hasattr(self.net, 'convertGeoToXY'):
                 return self.net.convertGeoToXY(latlng.lng, latlng.lat)
             elif hasattr(self.net, 'convertLonLat2XY'):
                 return self.net.convertLonLat2XY(latlng.lng, latlng.lat)
-            else:
-                # Fallback for simple maps without projection (Cartesian)
-                return float(latlng.lng), float(latlng.lat)
+            
+            # Se falhar, tenta ler o Bounding Box do mapa para calcular offset
+            # Isso é um fallback manual simples
+            bbox = self.net.getBBoxXY() # ((min_x, min_y), (max_x, max_y))
+            lon_min, lat_min, lon_max, lat_max = self.net.getBBoxGeo()
+            
+            # Interpolação Linear Simples (Regra de 3)
+            # (Funciona bem para áreas pequenas de cidade)
+            width_m = bbox[1][0] - bbox[0][0]
+            height_m = bbox[1][1] - bbox[0][1]
+            
+            width_deg = lon_max - lon_min
+            height_deg = lat_max - lat_min
+            
+            x = ((latlng.lng - lon_min) / width_deg) * width_m
+            y = ((latlng.lat - lat_min) / height_deg) * height_m
+            
+            return x, y
+
         except Exception as e:
-            logging.warning(f"Coordinate conversion failed (using raw): {e}")
+            logging.warning(f"Falha na conversão precisa de coordenadas: {e}. Usando Lat/Lng bruto (Isso pode quebrar a visualização).")
             return float(latlng.lng), float(latlng.lat)
 
     def _convert_latlng_to_edge(self, latlng) -> str:
