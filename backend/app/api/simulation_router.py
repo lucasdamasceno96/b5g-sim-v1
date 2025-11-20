@@ -1,25 +1,25 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 import io
+import logging
 
-# Modelos (ambos)
+# Importa os Modelos (Simples e Avançado)
 from app.models.simulation import SimulationPayload, AdvancedSimulationPayload
 
-# Serviços (ambos)
+# Importa os Serviços
 from app.services.simulation_service import SimulationService
-# A LINHA QUE FALTAVA ESTÁ AQUI:
 from app.services.advanced_simulation_service import AdvancedSimulationService
 
 router = APIRouter()
 
-# --- Endpoint Simples (existente) ---
+# --- Endpoint Simples (Random/Legacy) ---
 @router.post("/api/simulations/generate_zip")
 async def create_simulation(
     payload: SimulationPayload,
-    service: SimulationService = Depends(SimulationService) # <--- 'Depends' DENTRO da função
+    service: SimulationService = Depends(SimulationService)
 ):
     """
-    Cria uma simulação SIMPLES e retorna um ZIP.
+    Gera simulação simples (aleatória).
     """
     try:
         zip_buffer: io.BytesIO = service.create_simulation_zip(payload)
@@ -31,23 +31,22 @@ async def create_simulation(
             media_type="application/x-zip-compressed",
             headers=headers
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        print(f"Internal error: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        logging.error(f"Erro no Simple Sim: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
 
 
-# --- NOVO Endpoint Avançado ---
+# --- Endpoint Avançado (NED Dinâmico + RSUs + Jammers) ---
 @router.post("/api/simulations/generate_advanced_zip")
 async def create_advanced_simulation(
     payload: AdvancedSimulationPayload,
-    service: AdvancedSimulationService = Depends(AdvancedSimulationService) # <--- 'Depends' DENTRO da função
+    service: AdvancedSimulationService = Depends(AdvancedSimulationService)
 ):
     """
-    Cria uma simulação AVANÇADA (com posições Lat/Lng) e retorna um ZIP.
+    Gera simulação avançada com topologia .NED completa.
     """
     try:
+        # Chama o serviço avançado que gera o .NED e .INI
         zip_buffer: io.BytesIO = service.create_advanced_simulation_zip(payload)
         
         zip_filename = f"{payload.simulation_name}.zip"
@@ -61,8 +60,7 @@ async def create_advanced_simulation(
         
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except ImportError as e: # Captura erro do SUMOLIB
-        raise HTTPException(status_code=500, detail=f"Configuration Error: {e}. Did you export PYTHONPATH?")
     except Exception as e:
-        print(f"Internal error: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        logging.error(f"Erro no Advanced Sim: {e}")
+        # Retorna o erro detalhado para o frontend ver o alerta
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
