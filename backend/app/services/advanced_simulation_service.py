@@ -7,7 +7,6 @@ from pathlib import Path
 from datetime import datetime
 import json
 from typing import Tuple
-from pyproj import Proj, transform
 
 try:
     import sumolib
@@ -34,43 +33,21 @@ class AdvancedSimulationService(SimulationService):
             raise FileNotFoundError(f"Map file not found: {net_file}")
         self.net = sumolib.net.readNet(str(net_file))
 
-    # --- FIX: Robust Coordinate Conversion ---
-
-
     def _convert_latlng_to_xy(self, latlng) -> Tuple[float, float]:
-        """
-        Converte Lat/Lng para Metros (UTM) usando pyproj se o sumolib falhar.
-        Isso garante que o OMNeT++ receba metros, não graus.
-        """
+        """Converts Lat/Lng to SUMO X/Y coordinates with fallback methods."""
         if not self.net: raise Exception("SUMO net not loaded.")
         
         try:
-            # Tenta o método nativo do SUMO primeiro
+            # Try different SUMO methods depending on version/map type
             if hasattr(self.net, 'convertGeoToXY'):
                 return self.net.convertGeoToXY(latlng.lng, latlng.lat)
             elif hasattr(self.net, 'convertLonLat2XY'):
                 return self.net.convertLonLat2XY(latlng.lng, latlng.lat)
-            
-            # Se falhar, tenta ler o Bounding Box do mapa para calcular offset
-            # Isso é um fallback manual simples
-            bbox = self.net.getBBoxXY() # ((min_x, min_y), (max_x, max_y))
-            lon_min, lat_min, lon_max, lat_max = self.net.getBBoxGeo()
-            
-            # Interpolação Linear Simples (Regra de 3)
-            # (Funciona bem para áreas pequenas de cidade)
-            width_m = bbox[1][0] - bbox[0][0]
-            height_m = bbox[1][1] - bbox[0][1]
-            
-            width_deg = lon_max - lon_min
-            height_deg = lat_max - lat_min
-            
-            x = ((latlng.lng - lon_min) / width_deg) * width_m
-            y = ((latlng.lat - lat_min) / height_deg) * height_m
-            
-            return x, y
-
+            else:
+                # Fallback for simple maps without projection (Cartesian)
+                return float(latlng.lng), float(latlng.lat)
         except Exception as e:
-            logging.warning(f"Falha na conversão precisa de coordenadas: {e}. Usando Lat/Lng bruto (Isso pode quebrar a visualização).")
+            logging.warning(f"Coordinate conversion failed (using raw): {e}")
             return float(latlng.lng), float(latlng.lat)
 
     def _convert_latlng_to_edge(self, latlng) -> str:
@@ -78,7 +55,6 @@ class AdvancedSimulationService(SimulationService):
         if not self.net: raise Exception("SUMO net not loaded.")
         x, y = self._convert_latlng_to_xy(latlng)
         
-        # Increased radius to avoid errors on sparse maps
         lanes = self.net.getNeighboringLanes(x, y, 200) 
         if not lanes:
              lanes = self.net.getNeighboringLanes(x, y, 1000)
@@ -98,12 +74,8 @@ class AdvancedSimulationService(SimulationService):
                 try:
                     from_edge = self._convert_latlng_to_edge(route.start)
                     to_edge = self._convert_latlng_to_edge(route.end)
-                    
-                    if from_edge == to_edge:
-                        logging.warning(f"Skipping route {i}: Start and End edges are identical.")
-                        continue
+                    if from_edge == to_edge: continue
 
-                    # Using <flow> is safer than <trip> for SUMO routing
                     f.write(f'  <flow id="fixed_{i}" type="fixed_fleet" begin="0" end="{self.payload.simulation_time}" ')
                     f.write(f'number="{route.count}" from="{from_edge}" to="{to_edge}"/>\n')
                 except Exception as e:
@@ -112,13 +84,11 @@ class AdvancedSimulationService(SimulationService):
             f.write("</routes>\n")
         return route_file
 
-    # --- FIX: Replaced -N with -p for compatibility ---
     def _generate_random_routes_xml(self, sim_dir: Path) -> Path:
         """Generates random traffic using randomTrips.py."""
         route_file = sim_dir / "random.rou.xml"
         net_file = settings.SUMO_MAPS_DIR / self.payload.map_name
         
-        # Calculate period = Time / Vehicles (safer than -N on older SUMO)
         period = 0
         if self.payload.num_random_vehicles > 0:
             period = float(self.payload.simulation_time) / float(self.payload.num_random_vehicles)
@@ -137,16 +107,14 @@ class AdvancedSimulationService(SimulationService):
         subprocess.run(command, check=True, capture_output=True, text=True)
         return route_file
 
-    # --- FIX: Dynamic NED Generation ---
-# --- FIX: Sanitize names (Replace '-' with '_') ---
-    def _sanitize_name(self, name: str) -> str:
-        """Replaces invalid characters for OMNeT++ identifiers."""
-        return name.replace(" ", "_").replace("-", "_").replace(".", "_")
-
     def _generate_ned_file(self, payload: AdvancedSimulationPayload) -> str:
-        # FIX: Sanitize the name here
-        sim_name = self._sanitize_name(payload.simulation_name)
+        """Generates the .ned topology file dynamically."""
+        sim_name = payload.simulation_name.replace(" ", "_").replace("-", "_")
         
+        # Calculate safe vector size to prevent index out of bounds
+        # (Fixed + Random + 20% buffer)
+        total_cars = int((payload.num_fixed_vehicles + payload.num_random_vehicles) * 1.2) + 10
+
         ned = f"""package simulations.{sim_name};
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
@@ -182,10 +150,14 @@ network {sim_name}
         server: StandardHost {{ @display("p=660,136;i=device/server"); }}
         router: Router {{ @display("p=561,135;i=device/smallrouter"); }}
         upf: Upf {{ @display("p=462,136"); }}
+        
+        // Using a generic gNB for coverage
         gNodeB1: gNB {{ @display("p=150,150;is=vl"); }}
         
-        car[{payload.num_fixed_vehicles + payload.num_random_vehicles}]: CarV2X;
+        // Vehicle vector with safe buffer size
+        car[{total_cars}]: CarV2X;
 """
+        # Dynamic Jammers
         if payload.jammers_list:
             j_type = payload.jamming_params.jammer_type
             j_class = "DroneJammer" if j_type == "DroneJammer" else "NRJammer"
@@ -194,6 +166,7 @@ network {sim_name}
             for i, _ in enumerate(payload.jammers_list):
                 ned += f"        jammer_{i}: {j_class} {{ @display(\"i={icon}\"); }}\n"
 
+        # Dynamic RSUs
         if payload.rsus_list:
             for i, _ in enumerate(payload.rsus_list):
                 ned += f"        rsu_{i}: RSUNR {{ @display(\"i=device/antennatower\"); }}\n"
@@ -208,8 +181,11 @@ network {sim_name}
         return ned
 
     def _generate_omnetpp_ini(self, payload: AdvancedSimulationPayload) -> str:
-        # FIX: Sanitize name here too
-        sim_name = self._sanitize_name(payload.simulation_name)
+        """
+        Generates the omnetpp.ini file.
+        CRITICAL UPDATE: Now injects Jammer Physics parameters and Metrics Recording.
+        """
+        sim_name = payload.simulation_name.replace(" ", "_").replace("-", "_")
         jp = payload.jamming_params
         
         ini = f"""[General]
@@ -225,39 +201,79 @@ seed-set = {payload.random_seed}
 *.veinsManager.launchConfig = xmldoc("simulation.launchd.xml")
 *.veinsManager.updateInterval = 0.1s
 
-# --- V2X Application ---
+# --- Traffic Generation (V2X Application) ---
+# This ensures cars are actually talking to each other
 *.car[*].numApps = 1
-*.car[*].app[0].typename = "V2XApp"
+*.car[*].app[0].typename = "V2XApp" 
 *.car[*].app[0].sendInterval = {payload.app_params.send_interval_s}s
 *.car[*].app[0].packetSize = {payload.app_params.packet_size_b}B
+*.car[*].app[0].destAddresses = "broadcast" 
 *.car[*].mitigation.active = {"true" if payload.mitigation_active else "false"}
+*.car[*].mitigation.rerouteOnAttack = {"true" if payload.reroute_on_attack else "false"}
+
+# --- 5G Network Params ---
+*.car[*].phy.txPower = {payload.net_params.tx_power_dbm}dBm
+*.gNodeB*.phy.txPower = 40dBm
 """
-        # ... (O resto da função continua igual, configurando Jammers e RSUs)
+        # --- JAMMER CONFIGURATION (UPDATED) ---
         for i, jammer in enumerate(payload.jammers_list):
             x, y = self._convert_latlng_to_xy(jammer)
-            ini += f"\n*.jammer_{i}.mobility.typename = \"StaticGridMobility\"\n"
+            
+            ini += f"\n# --- Jammer {i} Setup ---\n"
+            
+            # 1. Mobility (Physics)
+            if jp.jammer_type == "DroneJammer":
+                # If mobile, use Linear or Static depending on implementation
+                ini += f"*.jammer_{i}.mobility.typename = \"StaticGridMobility\"\n" # Simplified for now
+            else:
+                ini += f"*.jammer_{i}.mobility.typename = \"StaticGridMobility\"\n"
+            
             ini += f"*.jammer_{i}.mobility.initialX = {x:.2f}m\n"
             ini += f"*.jammer_{i}.mobility.initialY = {y:.2f}m\n"
+            
+            # 2. Attack Logic (Application Layer)
             ini += f"*.jammer_{i}.app[0].typename = \"JammerApp\"\n"
             ini += f"*.jammer_{i}.app[0].startTime = {jp.start_time_s}s\n"
             ini += f"*.jammer_{i}.app[0].stopTime = {jp.stop_time_s}s\n"
-            ini += f"*.jammer_{i}.app[0].power = {jp.power_dbm}mW\n"
-            ini += f"*.jammer_{i}.app[0].strategy = \"{jp.strategy}\"\n"
+            
+            # 3. Radio/PHY Parameters (Critical for NRJammer)
+            # These params control the actual signal interference
+            ini += f"*.jammer_{i}.jammerType = \"{jp.strategy}\"\n"
+            ini += f"*.jammer_{i}.transmissionPower = {jp.power_dbm}dBm\n"
+            ini += f"*.jammer_{i}.active = true\n"
+            ini += f"*.jammer_{i}.carrierFrequency = 5.9GHz\n" 
 
+        # --- RSU CONFIGURATION ---
         for i, rsu in enumerate(payload.rsus_list):
             x, y = self._convert_latlng_to_xy(rsu)
-            ini += f"\n*.rsu_{i}.mobility.typename = \"StaticGridMobility\"\n"
+            ini += f"\n# RSU {i}\n"
+            ini += f"*.rsu_{i}.mobility.typename = \"StaticGridMobility\"\n"
             ini += f"*.rsu_{i}.mobility.initialX = {x:.2f}m\n"
             ini += f"*.rsu_{i}.mobility.initialY = {y:.2f}m\n"
 
-        ini += "\n**.scalar-recording = true\n**.vector-recording = true\n"
+        # --- METRICS RECORDING (CRITICAL FOR PAPER) ---
+        ini += """
+\n# --- Scientific Metrics Collection ---
+# These vectors are essential for the Tool Paper results
+**.scalar-recording = true
+**.vector-recording = true
+
+# Vehicle Metrics
+**.car[*].**.sinr.vector-recording = true
+**.car[*].**.throughput.vector-recording = true
+**.car[*].**.packetLoss.vector-recording = true
+**.car[*].**.minSnr.vector-recording = true
+
+# Jammer Metrics
+**.jammer_*.**.transmissionState.vector-recording = true
+**.jammer_*.**.radioMode.vector-recording = true
+"""
         return ini
 
     def _generate_sumocfg(self, payload) -> str:
         route_files = []
         if payload.num_fixed_vehicles > 0: route_files.append("fixed.rou.xml")
         if payload.num_random_vehicles > 0: route_files.append("random.rou.xml")
-        
         return f"""<configuration>
     <input>
         <net-file value="{payload.map_name}"/>
@@ -273,7 +289,6 @@ seed-set = {payload.random_seed}
         files = [payload.map_name, "simulation.sumocfg", "omnetpp.ini"]
         if payload.num_fixed_vehicles > 0: files.append("fixed.rou.xml")
         if payload.num_random_vehicles > 0: files.append("random.rou.xml")
-        
         xml = "<launchd>\n"
         for f in files: xml += f'  <copy file="{f}"/>\n'
         xml += '  <run command="sumo-gui -c simulation.sumocfg --remote-port 9999"/>\n</launchd>'
@@ -299,10 +314,9 @@ seed-set = {payload.random_seed}
             sumocfg = self._generate_sumocfg(payload)
             launchd = self._generate_launchd_xml(payload)
             
-            sim_folder = payload.simulation_name.replace(" ", "_")
+            sim_folder = payload.simulation_name.replace(" ", "_").replace("-", "_")
             
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                # Writes .NED inside the package folder structure
                 zf.writestr(f"{sim_folder}/simulation.ned", ned_content)
                 zf.writestr(f"{sim_folder}/package.ned", f"package simulations.{sim_folder};")
                 zf.writestr(f"{sim_folder}/omnetpp.ini", ini_content)
@@ -313,7 +327,6 @@ seed-set = {payload.random_seed}
                 zf.write(settings.SUMO_MAPS_DIR / payload.map_name, f"{sim_folder}/{payload.map_name}")
                 
         finally:
-            # Cleanup
             for f in gen_files: 
                 if f.exists(): f.unlink()
             if temp_dir.exists(): temp_dir.rmdir()

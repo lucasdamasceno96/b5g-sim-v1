@@ -88,7 +88,7 @@ export default function SimpleJammingPage() {
         
         // Map Simple 'Total' to Advanced 'Random'
         num_fixed_vehicles: 0,
-        num_random_vehicles: parseInt(formData.total_vehicles) || 0,
+        num_random_vehicles: parseInt(formData.total_vehicles) || 10,
         
         vehicle_distribution: formData.vehicle_distribution,
         communication_mode: formData.communication_mode,

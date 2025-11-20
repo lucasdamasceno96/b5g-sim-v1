@@ -1,7 +1,7 @@
 import axios from 'axios';
 import L from 'leaflet';
 import { useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { Circle, GeoJSON, MapContainer, Marker, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 
 // --- UI Helpers (Icons) ---
 const createIcon = (emoji, color) => L.divIcon({
@@ -355,8 +355,28 @@ export default function AdvancedJammingPage() {
                 
                 <GeoJsonLayer key={formData.map_name} mapName={formData.map_name} />
                 <MapClickHandler mode={mode} onClick={handleMapClick} />
+                {/* Render Jammers com Círculo de Alcance */}
+                {jammers.map((pos, i) => (
+                  <div key={`j-group-${i}`}> {/* Usamos div ou Fragment <> para agrupar */}
+                    
+                    <Marker 
+                      position={pos} 
+                      icon={formData.jamming_params.jammer_type === 'DroneJammer' ? jammerIcon : staticJammerIcon}
+                    >
+                      <Popup>Jammer {i + 1}</Popup>
+                    </Marker>
+
+                    {/* Círculo Visual de Alcance */}
+                    <Circle 
+                      center={pos}
+                      pathOptions={{ fillColor: 'red', color: 'red', opacity: 0.1, fillOpacity: 0.2 }}
+                      // Exemplo de cálculo: 20dBm -> 200 metros (apenas visual)
+                      radius={Math.max(50, formData.jamming_params.power_dbm * 10)} 
+                    />
+                  </div>
+                ))}
                 
-                {jammers.map((pos,i) => <Marker key={`j${i}`} position={pos} icon={formData.jamming_params.jammer_type==='DroneJammer'?jammerIcon:staticJammerIcon}><Popup>Jammer {i+1}</Popup></Marker>)}
+              
                 {rsus.map((pos,i) => <Marker key={`r${i}`} position={pos} icon={rsuIcon}><Popup>RSU {i+1}</Popup></Marker>)}
                 {route.start && <Marker position={route.start} icon={startIcon}><Popup>Start</Popup></Marker>}
                 {route.end && <Marker position={route.end} icon={endIcon}><Popup>End</Popup></Marker>}
