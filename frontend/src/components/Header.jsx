@@ -13,7 +13,7 @@ export default function Header() {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center">
             <Link to="/" className="text-xl font-bold text-white">
-              B5G CyberTest V2X
+              B5GCyberTestV2X
             </Link>
           </div>
           <div className="flex items-center space-x-4">
@@ -60,6 +60,13 @@ export default function Header() {
                       onClick={() => setIsDropdownOpen(false)}
                     >
                       Advanced Jamming
+                    </Link>
+                    <Link
+                      to="/simulations/expert-jamming"
+                      className="text-gray-200 block px-4 py-2 text-sm hover:bg-gray-600"
+                      onClick={() => setIsDropdownOpen(false)}
+                    >
+                      Expert Jamming
                     </Link>
                   </div>
                 </div>
