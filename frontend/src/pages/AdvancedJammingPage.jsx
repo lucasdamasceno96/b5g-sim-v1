@@ -150,7 +150,7 @@ export default function AdvancedJammingPage() {
       <div className="w-[360px] flex-shrink-0 bg-[#1e1e1e] border-r border-gray-800 flex flex-col h-full shadow-2xl z-20 text-gray-200">
         <div className="p-4 border-b border-gray-700 bg-[#252525]">
             <h1 className="text-lg font-bold text-white flex items-center gap-2">
-               <span className="text-blue-500">⚡</span> CyberV2X <span className="font-light text-gray-400">SimGen</span>
+               <span className="text-blue-500">⚡</span> Advanced <span className="font-light text-gray-400">Simulations</span>
             </h1>
         </div>
 

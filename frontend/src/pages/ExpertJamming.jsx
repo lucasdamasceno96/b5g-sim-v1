@@ -18,7 +18,7 @@ const icons = {
   rsu: createIcon("🗼", "#0288D1")
 };
 
-// --- MODAL DE EDIÇÃO (Melhorado) ---
+// --- MODAL DE EDIÇÃO ---
 const ConfigModal = ({ node, onClose, onSave }) => {
   const [params, setParams] = useState(node.params);
   const handleChange = (e) => {
@@ -34,7 +34,7 @@ const ConfigModal = ({ node, onClose, onSave }) => {
              <span>{node.type === 'car' ? '🚗' : node.type === 'drone' ? '🚁' : node.type === 'rsu' ? '🗼' : '📡'}</span> 
              Edit Object #{node.id}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white font-bold">✕</button>
         </div>
         
         <div className="p-5 space-y-5 overflow-y-auto custom-scrollbar">
@@ -112,13 +112,11 @@ const ConfigModal = ({ node, onClose, onSave }) => {
 };
 
 // --- MAP LAYER OTIMIZADO (React.memo) ---
-// Isso garante que o mapa pesado não seja redesenhado a cada clique
 const MemoizedGeoJson = React.memo(({ mapName }) => {
   const [data, setData] = useState(null);
   const map = useMapEvents({});
   useEffect(() => {
     if(!mapName) { setData(null); return; }
-    // Assume endpoint padrão para mapas
     fetch(`/maps/${mapName.replace('.net.xml','.geojson')}`)
         .then(r=>r.ok?r.json():null)
         .then(d=>{ 
