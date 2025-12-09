@@ -30,26 +30,23 @@ class SimulationService:
             raise FileNotFoundError(f"Map file not found: {net_file}")
         self.net = sumolib.net.readNet(str(net_file))
 
-    # --- Lógica Científica: Espalhamento de Jammers ---
     def _generate_jammer_positions(self, num_jammers):
-        """Gera coordenadas aleatórias dentro do Bounding Box do mapa."""
-        bbox = self.net.getBoundary() # (minX, minY, maxX, maxY)
+        """Generate random jammer positions inside the map bounding box."""
+        bbox = self.net.getBoundary()
         min_x, min_y, max_x, max_y = bbox
         
         positions = []
         for _ in range(num_jammers):
-            # Margem de segurança para não cair muito na borda
             x = random.uniform(min_x + 50, max_x - 50)
             y = random.uniform(min_y + 50, max_y - 50)
             positions.append((x, y))
         return positions
 
     def _generate_routes(self, sim_dir: Path, payload: SimulationPayload) -> Path:
-        """Gera tráfego de fundo (Background Traffic) usando randomTrips."""
+        """Generate background traffic using randomTrips.py."""
         route_file = sim_dir / "random.rou.xml"
         net_file = settings.SUMO_MAPS_DIR / payload.map_name
 
-        # Garante densidade constante
         period = float(payload.simulation_time) / max(1, payload.total_vehicles)
 
         command = [
@@ -66,8 +63,8 @@ class SimulationService:
         return route_file
 
     def _generate_ned_file(self, sim_name, num_cars, num_jammers):
-        """Gera a topologia dinâmica com base na densidade escolhida."""
-        ned = f"""package simulations.{sim_name};
+        """Generate network topology file."""
+        ned = f"""package {sim_name};
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networklayer.ipv4.RoutingTableRecorder;
@@ -97,16 +94,14 @@ network {sim_name} {{
         binder: Binder {{ @display("p=50,175;is=s"); }}
         carrierAggregation: CarrierAggregation {{ @display("p=50,250;is=s"); }}
         
-        // Core Network 5G
         server: StandardHost {{ @display("p=660,136;i=device/server"); }}
         router: Router {{ @display("p=561,135;i=device/smallrouter"); }}
         upf: Upf {{ @display("p=462,136"); }}
+        
         gNodeB1: gNB {{ @display("p=150,150;is=vl"); }}
         
-        // Vetor de Carros
         car[{num_cars}]: CarV2X;
 """
-        # Jammers Dinâmicos
         for i in range(num_jammers):
             ned += f"        jammer_{i}: DroneJammer {{ @display(\"i=device/drone\"); }}\n"
 
@@ -123,11 +118,12 @@ network {sim_name} {{
         sim_name = payload.simulation_name.replace(" ", "_")
         
         ini = f"""[General]
-network = simulations.{sim_name}.{sim_name}
+network = {sim_name}.{sim_name}
 sim-time-limit = {payload.simulation_time}s
 seed-set = {payload.random_seed}
+debug-on-errors = false
+cmdenv-express-mode = true
 
-# --- Veins Manager ---
 *.veinsManager.host = "localhost"
 *.veinsManager.port = 9999
 *.veinsManager.moduleType = "de.hshl.b5gcybertestv2x.nodes.CarV2X"
@@ -135,11 +131,23 @@ seed-set = {payload.random_seed}
 *.veinsManager.launchConfig = xmldoc("simulation.launchd.xml")
 *.veinsManager.updateInterval = 0.1s
 
-# --- 5G Network ---
-*.gNodeB*.phy.txPower = 40dBm
-*.car[*].phy.txPower = {payload.net_params.tx_power_dbm}dBm
+**.numBands = 25 
+**.ueTxPower = 26
+**.eNodeBTxPower = 46
 
-# --- App Layer (VoIP Scientific Model) ---
+*.car[*].cellularNic.nrPhy.dynamicCellAssociation = true
+*.car[*].masterId = 0     
+*.car[*].macCellId = 0    
+*.car[*].nrMasterId = 1     
+*.car[*].nrMacCellId = 1    
+
+**.gNodeB1.macCellId = 1
+**.gNodeB1.macNodeId = 1
+
+*.car[*].mobility.typename = "VeinsInetMobility"
+**.sctp.nagleEnabled = false
+**.sctp.enableHeartbeats = false
+
 *.server.numApps = 1
 *.server.app[0].typename = "VoIPReceiver"
 *.server.app[0].localPort = 3000
@@ -150,24 +158,22 @@ seed-set = {payload.random_seed}
 *.car[*].app[0].destPort = 3000
 *.car[*].app[0].startTime = uniform(0s, 5s)
 *.car[*].app[0].packetSize = {payload.app_params.packet_size_b}B
+*.car[*].phy.txPower = {payload.net_params.tx_power_dbm}dBm
 
-# --- Metrics (Data for Paper) ---
 **.scalar-recording = true
 **.vector-recording = true
 **.car[*].**.sinr.vector-recording = true
 **.car[*].**.packetLoss.vector-recording = true
 """
-        # Configuração dos Jammers (Se houver ataque)
+
         if payload.execute_with_attack and payload.jamming_params:
             jp = payload.jamming_params
             for i, (x, y) in enumerate(jammer_positions):
-                ini += f"\n# Jammer {i} (Auto-Placed)\n"
-                ini += f"*.jammer_{i}.mobility.typename = \"LinearMobility\"\n" 
+                ini += f"\n*.jammer_{i}.mobility.typename = \"LinearMobility\"\n"
                 ini += f"*.jammer_{i}.mobility.initialX = {x:.2f}m\n"
                 ini += f"*.jammer_{i}.mobility.initialY = {y:.2f}m\n"
                 ini += f"*.jammer_{i}.mobility.initialZ = 50m\n"
-                ini += f"*.jammer_{i}.mobility.speed = 10mps\n" # Patrulha aleatória
-                
+                ini += f"*.jammer_{i}.mobility.speed = 10mps\n"
                 ini += f"*.jammer_{i}.app[0].typename = \"JammerApp\"\n"
                 ini += f"*.jammer_{i}.app[0].startTime = {jp.start_time_s}s\n"
                 ini += f"*.jammer_{i}.app[0].stopTime = {jp.stop_time_s}s\n"
@@ -192,20 +198,13 @@ seed-set = {payload.random_seed}
     def create_simulation_zip(self, payload: SimulationPayload) -> io.BytesIO:
         self._load_net(payload.map_name)
         
-        # 1. Calcular Jammers (Lógica do Frontend já enviou os params, mas aqui garantimos posições)
-        # O frontend SimpleJammingPage.jsx já deve ter calculado e preenchido jamming_params
-        # Mas precisamos saber QUANTOS criar.
-        # Simplificação: Vamos assumir 10% dos carros se não especificado, ou baseado em lógica interna
-        
         num_jammers = 0
         if payload.execute_with_attack:
-            # Regra de Ouro Científica: 1 atacante para cada 10 vítimas em cenário denso
-            num_jammers = max(1, int(payload.total_vehicles * 0.10)) 
+            factor = 0.10
+            num_jammers = max(1, int(payload.total_vehicles * factor)) 
         
-        # 2. Gerar Posições
         jammer_positions = self._generate_jammer_positions(num_jammers)
         
-        # 3. Processamento
         sim_name = payload.simulation_name.replace(" ", "_")
         temp_dir = Path(f"temp_simple_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         temp_dir.mkdir()
@@ -228,13 +227,13 @@ seed-set = {payload.random_seed}
             
             demo_xml = "<config><interface hosts='**' address='10.x.x.x' netmask='255.x.x.x'/><multicast-group hosts='**' address='224.0.0.1'/></config>"
             
-            # 4. ZIP com Estrutura de Pacote
             zip_buffer = io.BytesIO()
-            folder = f"simulations/{sim_name}"
+
+            folder = f"{sim_name}"
             
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(f"{folder}/simulation.ned", ned)
-                zf.writestr(f"{folder}/package.ned", f"package simulations.{sim_name};")
+                zf.writestr(f"{folder}/package.ned", f"package {sim_name};")
                 zf.writestr(f"{folder}/omnetpp.ini", ini)
                 zf.writestr(f"{folder}/simulation.sumocfg", sumocfg)
                 zf.writestr(f"{folder}/simulation.launchd.xml", launchd)
@@ -242,7 +241,8 @@ seed-set = {payload.random_seed}
                 zf.write(route_file, f"{folder}/random.rou.xml")
                 
                 map_p = settings.SUMO_MAPS_DIR / payload.map_name
-                if map_p.exists(): zf.write(map_p, f"{folder}/{payload.map_name}")
+                if map_p.exists():
+                    zf.write(map_p, f"{folder}/{payload.map_name}")
                 
         finally:
             if route_file.exists(): route_file.unlink()

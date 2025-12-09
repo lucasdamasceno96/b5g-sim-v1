@@ -1,0 +1,37 @@
+services:
+  # --- Backend (Python + SUMO) ---
+  backend:
+    build: 
+      context: ./backend
+    container_name: cyberv2x_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # 1. Código Fonte (Hot Reload)
+      - ./backend:/app
+      # 2. Ignorar venv local (usa a do container)
+      - /app/.venv
+      # 3. MONTAGEM DOS MAPAS (Essencial!)
+      # Mapeia a pasta local './maps' para '/maps' dentro do container
+      - ./maps:/maps
+    environment:
+      # Sobrescreve as variáveis do seu .env local para funcionar no Docker
+      - SUMO_HOME=/usr/share/sumo
+      - SUMO_MAPS_DIR=/maps
+      - MAP_GENERATOR_OUTPUT_DIR=/maps
+    restart: unless-stopped
+
+  # --- Frontend (React) ---
+  frontend:
+    build: 
+      context: ./frontend
+    container_name: cyberv2x_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
