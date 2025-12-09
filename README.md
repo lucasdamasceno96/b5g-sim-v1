@@ -1,12 +1,3 @@
-Great news\! Here is a professional, concise, and academic-standard `README.md` for your Tool Paper repository.
-
-It highlights the scientific contribution and provides clear instructions for both Docker (for your advisor/reviewers) and manual setup.
-
----
-
-### `README.md`
-
-````markdown
 # CyberV2X Orchestrator
 
 **A Web-Based Platform for Automating V2X Cybersecurity Simulation Scenarios.**
@@ -67,6 +58,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
 ````
 
 Create a `.env` file in `backend/` pointing to your local paths:
@@ -105,3 +97,4 @@ npm run dev
 ```
 
 ```
+````
